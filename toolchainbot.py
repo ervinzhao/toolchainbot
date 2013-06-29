@@ -27,11 +27,11 @@ class BuildConfig:
     triple       = ''
     fpu          = ''
     floatabi     = ''
-	# --with-abi
+    # --with-abi
     abi          = ''
-	# --with-cpu
+    # --with-cpu
     cpu          = ''
-	# --with-arch
+    # --with-arch
     arch         = ''
     endian       = ''
     kernel_header = ''
@@ -39,6 +39,41 @@ class BuildConfig:
     jobs         = ''
     def __init__(self):
         pass
+
+class SourceVersion:
+    main  = 0
+    minor = 0
+    extra = 0
+    
+    def __init__(self, stringVersion):
+        verList = stringVersion.split('.')
+        if len(verList) < 2:
+            raise
+        main = int(verList[0])
+        minor = int(verList[1])
+        if len(verList) == 2:
+            extra = 0
+        else:
+            extra = int(verList[2])
+
+    def __lt__(self, other):
+        if main < other.main:
+            return True
+        else:
+            return False
+        if minor < other.minor:
+            return True
+        else:
+            return False
+        if extra < other.extra:
+            return True
+        else:
+            return False
+
+    def __eq__(self, other):
+        if main == other.main and minor == other.minor and extra == other.extra:
+            return True
+        return False
 
 builtin_aarch64 = {
     "triple" : "aarch64-linux-gnu",
@@ -350,7 +385,7 @@ def readConfigFile(path):
     config = ConfigParser.ConfigParser()
     files = config.read(path)
     if not files:
-        print("Could not read config file correcttly!")
+        print("Could not read configuration file correcttly!")
         sys.exit(1)
     section = 'default'
     buildConfig = BuildConfig()
@@ -394,41 +429,104 @@ def setEnvPath(buildConfig):
     newPath = newBin + ':' + oldPath
     os.environ['PATH'] = newPath
 
-def main():
-    opts, others = getopt.getopt(sys.argv[1:], 'h', ['config=', 'skip='])
-    configFile = ''
-    skipList = []
-    for item in opts:
-        if item[0] == '--config':
-            configFile = item[1]
-        elif item[0] == '--skip':
-            skipList.append(item[1])
+def printHelpMessage():
+    helpMsg = """Usage: toolchainbot [OPTIONS] ...
+build a cross toolchain automaticly.
 
-    if configFile == '':
-        print("No config file specified!")
-        sys.exit(1)
-    buildConfig = readConfigFile(configFile)
+    -h, --help              print this help message
+    -l, --list              list all supported builtin toolchain
+        --config=filename   use configuration file
+        --prefix=path       set installation path
+        --builtin=name      build a builtin toolchain, must specify installation
+                            path use --prefix option
+"""
+    print(helpMsg)
+    sys.exit(0)
+
+def printBuiltinList():
+    pass
+    sys.exit(0)
+
+class CmdLineOptions:
+    prefix = ''
+    config = ''
+    skipList = []
+    builtin = ''
+
+def handleOptions():
+    showHelpMsg = False
+    showBuiltinList = False
+    cmdopt = CmdLineOptions()
+    if len(sys.argv) >= 2:
+        optionsList, others = getopt.getopt(sys.argv[1:], 'lh',
+                                            ['list', 'help',
+                                             'config=', 'skip=', 'builtin='])
+        for item in optionsList:
+            if item[0] == '-l':
+                showBuiltinList = True
+                break
+            elif item[0] == '-h':
+                showHelpMsg = True
+                break
+            elif item[0] == '--prefix':
+                cmdopt.prefix = item[1]
+            elif item[0] == '--config':
+                cmdopt.config = item[1]
+            elif item[0] == '--skip':
+                cmdopt.skipList.append(item[1])
+            elif item[0] == '--builtin':
+                cmdopt.builtin = item[1]
+    else:
+        showHelpMsg = True
+    if showHelpMsg:
+        printHelpMessage()
+    if showBuiltinList:
+        printBuiltinList()
+    if cmdopt.builtin != '':
+        if cmdopt.builtin not in builtinTarget:
+            # Wrong built-in target.
+            print('Error ! Wrong buili-in target.\n')
+            print('Use -l option to get all of supported builtin target.')
+            sys.exit(1)
+        if cmdopt.prefix == '':
+            # Empty 'prefix' when using built-in target is not permitted.
+            print('Error ! You didn\' specify \'prefix\' option.\n')
+            print('\'prefix\' option must be specified when using builtin target,')
+            print('otherwise I don\'t known where to install the toolchain.')
+            sys.exit(1)
+    else:
+        if cmdopt.config == '':
+            # ??
+            print('No built-in, no configuration file, so nothing to be done.')
+            sys.exit(0)
+    return cmdopt
+
+def main():
+    cmdopt = handleOptions()
+    configFile = ''
+
+    buildConfig = readConfigFile(cmdopt.config)
     configureTarget(buildConfig)
     # Get source code first.
     getSource(buildConfig)
 
     setEnv()
-    if not 'binutils' in skipList and not 'all' in skipList:
+    if not 'binutils' in skipList and not 'all' in cmdopt.skipList:
         buildBinutils(buildConfig)
     setEnvPath(buildConfig)
 
-    if not 'gcc1' in skipList and not 'all' in skipList:
+    if not 'gcc1' in skipList and not 'all' in cmdopt.skipList:
         buildGccPass1(buildConfig)
 
-    if not 'header' in skipList and not 'all' in skipList:
+    if not 'header' in skipList and not 'all' in cmdopt.skipList:
         installKernelHeader(buildConfig)
 
-    if not 'glibc' in skipList and not 'all' in skipList:
+    if not 'glibc' in skipList and not 'all' in cmdopt.skipList:
         buildGlibc(buildConfig)
     # I don't known why this hack should be done.
     hackLibPath(buildConfig)
     
-    if not 'gcc2' in skipList and not 'all' in skipList:
+    if not 'gcc2' in skipList and not 'all' in cmdopt.skipList:
         buildGccPass2(buildConfig)
 
 if __name__ == "__main__":
