@@ -314,8 +314,7 @@ def hackLibPath(buildConfig):
         sys.exit(1)
     os.chdir(cwd)
 
-def uncompress(tarball, build, targetDir):
-    source = build + '/' + targetDir
+def uncompress(tarball, build, source):
     if os.path.exists(source):
         print('Skip ' + tarball)
         return
@@ -330,23 +329,36 @@ def uncompress(tarball, build, targetDir):
 def downloadTarball(name, version, target):
     return ''
 
-def getSourceTarball(name, version, target):
+
+def getSourceTarball(name, version, downloads, build):
     fullName = name + '-' + version
-    path = target + '/' + fullName + '.tar.bz2'
+    path = downloads + '/' + fullName + '.tar.bz2'
+    source = build + '/' + fullName
     if os.path.exists(path):
-        return path, fullName
-    path = target + '/' + fullName + '.tar.xz'
+        return path, source 
+    path = downloads + '/' + fullName + '.tar.xz'
     if os.path.exists(path):
-        return path, fullName
-    path = target + '/' + fullName + '.tar.gz'
+        return path, source
+    path = downloads + '/' + fullName + '.tar.gz'
     if os.path.exists(path):
-        return path, fullName
-    tarball = downloadTarball(name, version, target)
+        return path, source
+    tarball = downloadTarball(name, version, downloads)
     if not os.path.exists(tarball):
         print('Error! Could not find ' + tarball)
         print('name =' + name + '; version =' + version)
         sys.exit(1)
-    return tarball, fullName
+    return tarball, source
+
+def mergeGlibcPorts(src_glibc, glibcVersion, downloads, build):
+    curVersion = SourceVersion(glibcVersion)
+    minVersion = SourceVersion('2.3.5')
+    maxVersion = SourceVersion('2.16.0')
+    if curVersion < minVersion or curVersion > maxVersion:
+        # Don't need merge 'ports' directory.
+        return
+    tar_ports, src_ports = getSourceTarball('glibc-ports', glibcVersion, downloads, build)
+    uncompress(tar_ports, build, src_ports)
+    shutil.move(src_ports, src_glibc)
 
 def getSource(buildConfig):
     downloads = buildConfig.path + '/' + 'downloads'
@@ -359,13 +371,17 @@ def getSource(buildConfig):
     except:
         print('Error when creating directory!')
         sys.exit(1)
-    tar_binutils, src_binutils = getSourceTarball('binutils', buildConfig.binutils, downloads)
+    tar_binutils, src_binutils = getSourceTarball('binutils', buildConfig.binutils, downloads, build)
     uncompress(tar_binutils, build, src_binutils)
-    tar_gcc, src_gcc = getSourceTarball('gcc',   buildConfig.gcc, downloads)
+    tar_gcc, src_gcc = getSourceTarball('gcc',   buildConfig.gcc, downloads, build)
     uncompress(tar_gcc, build, src_gcc)
-    tar_glibc, src_glibc = getSourceTarball('glibc', buildConfig.glibc, downloads)
+
+    tar_glibc, src_glibc = getSourceTarball('glibc', buildConfig.glibc, downloads, build)
     uncompress(tar_glibc, build, src_glibc)
-    tar_linux, src_linux = getSourceTarball('linux', buildConfig.linux, downloads)
+    # Merge glibc 'ports' directory for glibc-2.3.5 ~ glibc-2.16.0
+    mergeGlibcPorts(src_glibc, buildConfig.glibc, downloads, build)
+
+    tar_linux, src_linux = getSourceTarball('linux', buildConfig.linux, downloads, build)
     uncompress(tar_linux, build, src_linux)
 
     buildConfig.build = os.path.abspath(build)
