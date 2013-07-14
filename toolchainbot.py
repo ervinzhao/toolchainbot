@@ -171,6 +171,8 @@ def configureBuildOptions(buildConfig, cmdopt):
     buildConfig.options.target = '--target=' + buildConfig.triple
     buildConfig.options.libhost = '--host=' + buildConfig.triple
     buildConfig.options.prefix = '--prefix=' + buildConfig.prefix
+    if cmdopt.sysroot == '':
+        cmdopt.sysroot = True
     if cmdopt.sysroot == True:
         buildConfig.sysroot = buildConfig.prefix + '/fakeroot'
         buildConfig.options.sysroot = '--with-sysroot=' + buildConfig.prefix + '/fakeroot'
@@ -461,7 +463,13 @@ def readConfigFile(buildConfig, cmdopt):
     buildConfig.linux    = readOptions(config, section, 'linux')
     buildConfig.workdir  = readOptions(config, section, 'workdir')
     buildConfig.prefix   = readOptions(config, section, 'prefix')
-    #buildConfig.version  = readOptions(config, section, 'version')
+
+    if cmdopt.sysroot == '':
+        sysroot  = readOptions(config, section, 'sysroot')
+        if sysroot == 'no' or sysroot == 'off':
+            cmdopt.sysroot == False
+        else:
+            cmdopt.sysroot == True
 
     if cmdopt.builtin == '':
         buildConfig.target   = readOptions(config, section, 'target')
@@ -508,7 +516,7 @@ class CmdLineOptions:
     config = ''
     skipList = []
     builtin = ''
-    sysroot = True
+    sysroot = ''
     jobs    = 4
 
 def handleOptions():
