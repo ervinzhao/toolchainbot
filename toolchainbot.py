@@ -7,10 +7,20 @@ import getopt
 import subprocess
 import ConfigParser
 
+class BuildOptions:
+    target = ''
+    prefix = ''
+    sysroot = ''
+    libpath = ''
+    libhost = '' 
+    libprefix = ''
+    jobs   = ''
+
 class BuildConfig:
     # Target directory.
-    path     = ''
+    workdir  = ''
     prefix   = ''
+    sysroot  = ''
     binutils = ''
     gcc      = ''
     glibc    = ''
@@ -36,12 +46,13 @@ class BuildConfig:
     endian       = ''
     kernel_header = ''
 
-    jobs         = ''
+    options = BuildOptions()
+
     def __init__(self):
         pass
 
 class SourceVersion:
-    main  = 0
+    major = 0
     minor = 0
     extra = 0
     
@@ -49,23 +60,23 @@ class SourceVersion:
         verList = stringVersion.split('.')
         if len(verList) < 2:
             raise
-        main = int(verList[0])
-        minor = int(verList[1])
+        self.major = int(verList[0])
+        self.minor = int(verList[1])
         if len(verList) == 2:
-            extra = 0
+            self.extra = 0
         else:
-            extra = int(verList[2])
+            self.extra = int(verList[2])
 
     def __lt__(self, other):
-        if main < other.main:
+        if self.major < other.major:
             return True
-        else:
+        elif self.major > other.major:
             return False
-        if minor < other.minor:
+        if self.minor < other.minor:
             return True
-        else:
+        elif self.minor > other.minor:
             return False
-        if extra < other.extra:
+        if self.extra < other.extra:
             return True
         else:
             return False
@@ -113,6 +124,7 @@ def checkReturnCode(ret, msg):
         sys.exit(1)
 
 def checkStrVersion(minVersion, curVersion):
+    #print(minVersion + ' ' + curVersion)
     minVerList = minVersion.split('.')
     curVerList = curVersion.split('.')
     if len(curVerList) > 3:
@@ -120,51 +132,79 @@ def checkStrVersion(minVersion, curVersion):
         sys.exit(1)
     i = 0;
     while i < len(minVerList) and i < 3:
-        if int(minVerList[i]) < int(curVerList[i]):
+        if int(minVerList[i]) > int(curVerList[i]):
             return False
         i = i + 1
     return True
 
 def checkVersion(buildConfig, config):
-    if not checkStrVersion(config.gcc, buildConfig.gcc):
+    if not checkStrVersion(config['gcc'], buildConfig.gcc):
         print('Current version of gcc do not work!')
         sys.exit(1)
-    if not checkStrVersion(config.glibc, buildConfig.glibc):
+    if not checkStrVersion(config['glibc'], buildConfig.glibc):
         print('Current version of glibc do not work!')
         sys.exit(1)
-    if not checkStrVersion(config.binutils, buildConfig.binutils):
+    if not checkStrVersion(config['binutils'], buildConfig.binutils):
         print('Current version of binutils do not work!')
         sys.exit(1)
-    if not checkStrVersion(config.linux, buildConfig.linux):
+    if not checkStrVersion(config['linux'], buildConfig.linux):
         print('Current version of linux do not work!')
         sys.exit(1)
 
-def useBuiltinConfig(buildConfig):
-    config = builtinTarget[buildConfig.target]
-    if buildConfig.version == 'default':
+def useBuiltinConfig(buildConfig, cmdopt):
+    config = builtinTarget[cmdopt.builtin]
+    if buildConfig.gcc == '':
         buildConfig.gcc = config['default-gcc']
+    if buildConfig.glibc == '':
         buildConfig.glibc = config['default-glibc']
+    if buildConfig.linux == '':
         buildConfig.linux = config['default-linux']
+    if buildConfig.binutils == '':
         buildConfig.binutils = config['default-binutils']
-    else:
-        checkVersion(buildConfig, config)
+    checkVersion(buildConfig, config)
+
     buildConfig.triple = config['triple']
     buildConfig.kernel_header = config['kernel_header']
 
-def configureTarget(buildConfig):
-    if buildConfig.jobs == '':
-        buildConfig.jobs = '-j10'
+def configureBuildOptions(buildConfig, cmdopt):
+    buildConfig.options.jobs = '-j' + str(cmdopt.jobs)
+    buildConfig.options.target = '--target=' + buildConfig.triple
+    buildConfig.options.libhost = '--host=' + buildConfig.triple
+    buildConfig.options.prefix = '--prefix=' + buildConfig.prefix
+    if cmdopt.sysroot == True:
+        buildConfig.sysroot = buildConfig.prefix + '/fakeroot'
+        buildConfig.options.sysroot = '--with-sysroot=' + buildConfig.prefix + '/fakeroot'
+        buildConfig.options.libpath = buildConfig.sysroot + '/usr'
+        buildConfig.options.libprefix = '--prefix=/usr'
     else:
-        if buildConfig.jobs[0:2] != '-j':
-            buildConfig.jobs = '-j' + str(int(buildConfig.jobs))
-        else:
-            buildConfig.jobs = '-j' + str(int(buildConfig.jobs[2:]))
-    if buildConfig.target != '' and buildConfig.target in builtinTarget:
-        useBuiltinConfig(buildConfig)
+        buildConfig.options.sysroot = ''
+        buildConfig.options.libpath = buildConfig.prefix
+        buildConfig.options.libprefix = buildConfig.options.prefix
+
+def configureTarget(buildConfig, cmdopt):
+    if cmdopt.builtin != '':
+        useBuiltinConfig(buildConfig, cmdopt)
     else:
         print('error now')
         print(buildConfig.target)
         print(builtinTarget)
+
+    if buildConfig.workdir == '':
+        buildConfig.workdir = '.'
+    # Checking directory.
+    if not os.path.exists(buildConfig.workdir):
+        print('Target directory does not exist!')
+        sys.exit(1)
+    # TODO: Check prefix options
+    if cmdopt.prefix != '':
+        buildConfig.prefix = cmdopt.prefix
+    elif buildConfig.prefix == '':
+        buildConfig.prefix = buildConfig.workdir + '/' + 'install'
+
+    buildConfig.workdir = os.path.abspath(buildConfig.workdir)
+    buildConfig.prefix = os.path.abspath(buildConfig.prefix)
+
+    configureBuildOptions(buildConfig, cmdopt)
 		
 
 def buildBinutils(buildConfig):
@@ -180,11 +220,12 @@ def buildBinutils(buildConfig):
         print('Error when building binutils.')
         sys.exit(1)
     configScript = buildConfig.src_binutils + '/configure'
-    target = '--target=' + buildConfig.triple
-    prefix = '--prefix=' + buildConfig.prefix
-    ret = subprocess.call([configScript, target, prefix])
+    ret = subprocess.call([configScript, buildConfig.options.target,
+                           buildConfig.options.prefix,
+                           buildConfig.options.sysroot
+                          ])
     checkReturnCode(ret, 'configure binutils')
-    ret = subprocess.call(['make', buildConfig.jobs])
+    ret = subprocess.call(['make', buildConfig.options.jobs])
     checkReturnCode(ret, 'make binutils')
     ret = subprocess.call(['make', 'install'])
     checkReturnCode(ret, 'install binutils')
@@ -203,16 +244,16 @@ def buildGccPass1(buildConfig):
         print('Error when building gcc pass 1.')
         sys.exit(1)
     configScript = buildConfig.src_gcc + '/configure'
-    target = '--target=' + buildConfig.triple
-    prefix = '--prefix=' + buildConfig.prefix
 
-    ret = subprocess.call([configScript, target, prefix,
+    ret = subprocess.call([configScript, buildConfig.options.target,
+                           buildConfig.options.prefix,
+                           buildConfig.options.sysroot,
             '--enable-languages=c', '--disable-shared', '--disable-nls', '--disable-threads',
             '--disable-libssp', '--without-headers', '--disable-decimal-float',
             '--disable-libgomp', '--disable-libmudflap', '--disable-multilib',
             '--with-gnu-ld', '--with-gnu-as', '--with-newlib'])
     checkReturnCode(ret, 'configure gcc pass 1')
-    ret = subprocess.call(['make','all-gcc' ,'all-target-libgcc' , buildConfig.jobs])
+    ret = subprocess.call(['make','all-gcc' ,'all-target-libgcc' , buildConfig.options.jobs])
     checkReturnCode(ret, 'make gcc pass 1')
     ret = subprocess.call(['make', 'install-gcc', 'install-target-libgcc'])
     checkReturnCode(ret, 'install gcc pass 1')
@@ -227,7 +268,9 @@ def installKernelHeader(buildConfig):
     checkReturnCode(ret, 'make mrproper')
     ret = subprocess.call(['make', 'ARCH='+buildConfig.kernel_header, 'headers_check'])
     checkReturnCode(ret, 'make headers check')
-    ret = subprocess.call(['make', 'ARCH='+buildConfig.kernel_header, 'INSTALL_HDR_PATH='+buildConfig.prefix, 'headers_install'])
+
+    ret = subprocess.call(['make', 'ARCH='+buildConfig.kernel_header,
+                           'INSTALL_HDR_PATH='+buildConfig.options.libpath, 'headers_install'])
     checkReturnCode(ret, 'install kernel header')
 
     os.chdir(cwd)
@@ -245,16 +288,23 @@ def buildGlibc(buildConfig):
         print('Error when building binutils.')
         sys.exit(1)
     configScript = buildConfig.src_glibc + '/configure'
-    target = '--host=' + buildConfig.triple
-    prefix = '--prefix=' + buildConfig.prefix
-    header = os.path.abspath(buildConfig.prefix + '/include')
+
+    header = os.path.abspath(buildConfig.options.libpath + '/include')
     binutils = os.path.abspath(buildConfig.prefix + '/bin')
-    ret = subprocess.call([configScript, target, prefix, '--enable-add-ons',
-            '--with-headers='+header, '--with-binutils='+binutils])
+
+    ret = subprocess.call([configScript, buildConfig.options.libhost,
+                           buildConfig.options.libprefix,
+                           '--enable-add-ons',
+                           '--with-headers='+header,
+                           '--with-binutils='+binutils])
     checkReturnCode(ret, 'configure glibc')
-    ret = subprocess.call(['make', buildConfig.jobs])
+    ret = subprocess.call(['make', buildConfig.options.jobs])
     checkReturnCode(ret, 'make glibc')
-    ret = subprocess.call(['make', 'install'])
+    if buildConfig.options.sysroot == '':
+        ret = subprocess.call(['make', 'install'])
+    else:
+        ret = subprocess.call(['make', 'install',
+                               'install_root=' + buildConfig.sysroot])
     checkReturnCode(ret, 'install glibc')
 
     os.chdir(cwd)
@@ -271,14 +321,14 @@ def buildGccPass2(buildConfig):
         print('Error when building gcc pass 2.')
         sys.exit(1)
     configScript = buildConfig.src_gcc + '/configure'
-    target = '--target=' + buildConfig.triple
-    prefix = '--prefix=' + buildConfig.prefix
 
-    ret = subprocess.call([configScript, target, prefix,
+    ret = subprocess.call([configScript, buildConfig.options.target,
+                           buildConfig.options.prefix,
+                           buildConfig.options.sysroot,
             '--enable-languages=c,c++', '--enable-shared', '--disable-nls', '--enable-c99',
             '--enable-long-long', '--disable-multilib'])
     checkReturnCode(ret, 'configure gcc pass 2')
-    ret = subprocess.call(['make', buildConfig.jobs])
+    ret = subprocess.call(['make', buildConfig.options.jobs])
     checkReturnCode(ret, 'make gcc pass 2')
     ret = subprocess.call(['make', 'install'])
     checkReturnCode(ret, 'install gcc pass 2')
@@ -344,8 +394,8 @@ def getSourceTarball(name, version, downloads, build):
         return path, source
     tarball = downloadTarball(name, version, downloads)
     if not os.path.exists(tarball):
-        print('Error! Could not find ' + tarball)
-        print('name =' + name + '; version =' + version)
+        print('Error! Could not find :' + tarball)
+        print('name = ' + name + '; version = ' + version)
         sys.exit(1)
     return tarball, source
 
@@ -361,8 +411,8 @@ def mergeGlibcPorts(src_glibc, glibcVersion, downloads, build):
     shutil.move(src_ports, src_glibc)
 
 def getSource(buildConfig):
-    downloads = buildConfig.path + '/' + 'downloads'
-    build     = buildConfig.path + '/' + 'build'
+    downloads = buildConfig.workdir + '/' + 'downloads'
+    build     = buildConfig.workdir + '/' + 'build'
     try:
         if not os.path.exists(downloads):
             os.mkdir(downloads)
@@ -385,10 +435,10 @@ def getSource(buildConfig):
     uncompress(tar_linux, build, src_linux)
 
     buildConfig.build = os.path.abspath(build)
-    buildConfig.src_binutils = os.path.abspath(build + '/' + src_binutils)
-    buildConfig.src_gcc      = os.path.abspath(build + '/' + src_gcc)
-    buildConfig.src_glibc    = os.path.abspath(build + '/' + src_glibc)
-    buildConfig.src_linux    = os.path.abspath(build + '/' + src_linux)
+    buildConfig.src_binutils = os.path.abspath(src_binutils)
+    buildConfig.src_gcc      = os.path.abspath(src_gcc)
+    buildConfig.src_glibc    = os.path.abspath(src_glibc)
+    buildConfig.src_linux    = os.path.abspath(src_linux)
 
 
 def readOptions(config, section, name):
@@ -397,42 +447,32 @@ def readOptions(config, section, name):
     except:
         return ''
 
-def readConfigFile(path):
+def readConfigFile(buildConfig, cmdopt):
+    configFilePath = cmdopt.config
     config = ConfigParser.ConfigParser()
-    files = config.read(path)
+    files = config.read(configFilePath)
     if not files:
         print("Could not read configuration file correcttly!")
         sys.exit(1)
     section = 'default'
-    buildConfig = BuildConfig()
     buildConfig.binutils = readOptions(config, section, 'binutils')
     buildConfig.gcc      = readOptions(config, section, 'gcc')
     buildConfig.glibc    = readOptions(config, section, 'glibc')
     buildConfig.linux    = readOptions(config, section, 'linux')
-    buildConfig.path     = readOptions(config, section, 'path')
+    buildConfig.workdir  = readOptions(config, section, 'workdir')
     buildConfig.prefix   = readOptions(config, section, 'prefix')
-    buildConfig.version  = readOptions(config, section, 'version')
+    #buildConfig.version  = readOptions(config, section, 'version')
 
-    buildConfig.target   = readOptions(config, section, 'target')
-    buildConfig.triple   = readOptions(config, section, 'triple')
-    buildConfig.fpu      = readOptions(config, section, 'fpu')
-    buildConfig.floatabi = readOptions(config, section, 'floatabi')
-    buildConfig.abi      = readOptions(config, section, 'abi')
-    buildConfig.cpu      = readOptions(config, section, 'cpu')
-    buildConfig.arch     = readOptions(config, section, 'arch')
+    if cmdopt.builtin == '':
+        buildConfig.target   = readOptions(config, section, 'target')
+        buildConfig.triple   = readOptions(config, section, 'triple')
+        buildConfig.fpu      = readOptions(config, section, 'fpu')
+        buildConfig.floatabi = readOptions(config, section, 'floatabi')
+        buildConfig.abi      = readOptions(config, section, 'abi')
+        buildConfig.cpu      = readOptions(config, section, 'cpu')
+        buildConfig.arch     = readOptions(config, section, 'arch')
 
-    buildConfig.jobs     = readOptions(config, section, 'jobs')
 
-    if buildConfig.path == '':
-        buildConfig.path = '.'
-    if buildConfig.prefix == '':
-        buildConfig.prefix = buildConfig.path + '/' + 'install'
-    buildConfig.path = os.path.abspath(buildConfig.path)
-    buildConfig.prefix = os.path.abspath(buildConfig.prefix)
-    if not os.path.exists(buildConfig.path):
-        print('Target directory does not exist!')
-        sys.exit(1)
-    return buildConfig
 
 def setEnv():
     os.unsetenv('C_INCLUDE_PATH')
@@ -449,18 +489,18 @@ def printHelpMessage():
     helpMsg = """Usage: toolchainbot [OPTIONS] ...
 build a cross toolchain automaticly.
 
-    -h, --help              print this help message
-    -l, --list              list all supported builtin toolchain
-        --config=filename   use configuration file
-        --prefix=path       set installation path
-        --builtin=name      build a builtin toolchain, must specify installation
+    -h, --help              Print this help message
+    -l, --list              List all supported builtin toolchain
+        --config=filename   Use configuration file
+        --prefix=path       Set installation path
+        --builtin=name      Build a builtin toolchain, must specify installation
                             path use --prefix option
+        --jobs=number       Specifies the number of jobs to run simultaneously.
 """
     print(helpMsg)
     sys.exit(0)
 
 def printBuiltinList():
-    pass
     sys.exit(0)
 
 class CmdLineOptions:
@@ -468,15 +508,22 @@ class CmdLineOptions:
     config = ''
     skipList = []
     builtin = ''
+    sysroot = True
+    jobs    = 4
 
 def handleOptions():
     showHelpMsg = False
     showBuiltinList = False
     cmdopt = CmdLineOptions()
     if len(sys.argv) >= 2:
-        optionsList, others = getopt.getopt(sys.argv[1:], 'lh',
-                                            ['list', 'help',
-                                             'config=', 'skip=', 'builtin='])
+        try:
+            optionsList, others = getopt.getopt(sys.argv[1:], 'lh',
+                                                ['list', 'help',
+                                                 'config=', 'skip=', 'builtin=',
+                                                 'prefix=', 'sysroot=', 'jobs='])
+        except getopt.GetoptError, exc:
+            print(exc.msg)
+            sys.exit(1)
         for item in optionsList:
             if item[0] == '-l':
                 showBuiltinList = True
@@ -492,6 +539,20 @@ def handleOptions():
                 cmdopt.skipList.append(item[1])
             elif item[0] == '--builtin':
                 cmdopt.builtin = item[1]
+            elif item[0] == '--sysroot':
+                if item[1] == 'on' or item[1] == 'yes':
+                    cmdopt.sysroot = True
+                elif item[1] == 'off' or item[1] == 'no':
+                    cmdopt.sysroot = False
+                else:
+                    print('Warning : Bad value for sysroot option, use \'yes\' by default.')
+            elif item[0] == '--jobs':
+                try:
+                    jobs = int(item[1])
+                    if jobs > 1:
+                        cmdopt.jobs = jobs
+                except:
+                    pass
     else:
         showHelpMsg = True
     if showHelpMsg:
@@ -506,7 +567,7 @@ def handleOptions():
             sys.exit(1)
         if cmdopt.prefix == '':
             # Empty 'prefix' when using built-in target is not permitted.
-            print('Error ! You didn\' specify \'prefix\' option.\n')
+            print('Error ! You didn\'t specify \'prefix\' option.\n')
             print('\'prefix\' option must be specified when using builtin target,')
             print('otherwise I don\'t known where to install the toolchain.')
             sys.exit(1)
@@ -521,28 +582,31 @@ def main():
     cmdopt = handleOptions()
     configFile = ''
 
-    buildConfig = readConfigFile(cmdopt.config)
-    configureTarget(buildConfig)
+    buildConfig = BuildConfig()
+    if cmdopt.config != '':
+        readConfigFile(buildConfig, cmdopt)
+    configureTarget(buildConfig, cmdopt)
     # Get source code first.
     getSource(buildConfig)
 
     setEnv()
-    if not 'binutils' in skipList and not 'all' in cmdopt.skipList:
+    if not 'binutils' in cmdopt.skipList and not 'all' in cmdopt.skipList:
         buildBinutils(buildConfig)
     setEnvPath(buildConfig)
 
-    if not 'gcc1' in skipList and not 'all' in cmdopt.skipList:
+    if not 'gcc1' in cmdopt.skipList and not 'all' in cmdopt.skipList:
         buildGccPass1(buildConfig)
 
-    if not 'header' in skipList and not 'all' in cmdopt.skipList:
+    if not 'header' in cmdopt.skipList and not 'all' in cmdopt.skipList:
         installKernelHeader(buildConfig)
 
-    if not 'glibc' in skipList and not 'all' in cmdopt.skipList:
+    if not 'glibc' in cmdopt.skipList and not 'all' in cmdopt.skipList:
         buildGlibc(buildConfig)
     # I don't known why this hack should be done.
-    hackLibPath(buildConfig)
+    if cmdopt.sysroot == True:
+        hackLibPath(buildConfig)
     
-    if not 'gcc2' in skipList and not 'all' in cmdopt.skipList:
+    if not 'gcc2' in cmdopt.skipList and not 'all' in cmdopt.skipList:
         buildGccPass2(buildConfig)
 
 if __name__ == "__main__":
