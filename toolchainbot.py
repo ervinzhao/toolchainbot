@@ -287,7 +287,7 @@ def buildGlibc(buildConfig):
         os.mkdir(build)
         os.chdir(build)
     except:
-        print('Error when building binutils.')
+        print('Error when building glibc.')
         sys.exit(1)
     configScript = buildConfig.src_glibc + '/configure'
 
