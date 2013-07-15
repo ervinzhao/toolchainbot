@@ -343,6 +343,7 @@ def hackMoveTo(current, target):
         os.rename(current + '/' + fname, target + '/' + fname)
     shutil.rmtree(current)
 
+# A library/include directory path hack, it's needed when sysroot was disable.
 def hackLibPath(buildConfig):
     targetLib = os.path.abspath(buildConfig.prefix + '/' + buildConfig.triple)
     rootLib   = os.path.abspath(buildConfig.prefix + '/lib')
@@ -366,7 +367,8 @@ def hackLibPath(buildConfig):
         sys.exit(1)
     os.chdir(cwd)
 
-def uncompress(tarball, build, source):
+# Decompress source files tarball. 
+def decompress(tarball, build, source):
     if os.path.exists(source):
         print('Skip ' + tarball)
         return
@@ -378,10 +380,11 @@ def uncompress(tarball, build, source):
         print('Uncompress error!')
         sys.exit(1)
 
+# Download the source files tarball from Internet, not implemented as you see.
 def downloadTarball(name, version, target):
     return ''
 
-
+# Prepare source files tarball, download them if needed.
 def getSourceTarball(name, version, downloads, build):
     fullName = name + '-' + version
     path = downloads + '/' + fullName + '.tar.bz2'
@@ -401,6 +404,7 @@ def getSourceTarball(name, version, downloads, build):
         sys.exit(1)
     return tarball, source
 
+# Merge glibc-ports directory if needed.
 def mergeGlibcPorts(src_glibc, glibcVersion, downloads, build):
     curVersion = SourceVersion(glibcVersion)
     minVersion = SourceVersion('2.3.5')
@@ -409,9 +413,10 @@ def mergeGlibcPorts(src_glibc, glibcVersion, downloads, build):
         # Don't need merge 'ports' directory.
         return
     tar_ports, src_ports = getSourceTarball('glibc-ports', glibcVersion, downloads, build)
-    uncompress(tar_ports, build, src_ports)
+    decompress(tar_ports, build, src_ports)
     shutil.move(src_ports, src_glibc)
 
+# Prepare source files directory of linux/binutils/gcc/glibc.
 def getSource(buildConfig):
     downloads = buildConfig.workdir + '/' + 'downloads'
     build     = buildConfig.workdir + '/' + 'build'
@@ -424,17 +429,17 @@ def getSource(buildConfig):
         print('Error when creating directory!')
         sys.exit(1)
     tar_binutils, src_binutils = getSourceTarball('binutils', buildConfig.binutils, downloads, build)
-    uncompress(tar_binutils, build, src_binutils)
+    decompress(tar_binutils, build, src_binutils)
     tar_gcc, src_gcc = getSourceTarball('gcc',   buildConfig.gcc, downloads, build)
-    uncompress(tar_gcc, build, src_gcc)
+    decompress(tar_gcc, build, src_gcc)
 
     tar_glibc, src_glibc = getSourceTarball('glibc', buildConfig.glibc, downloads, build)
-    uncompress(tar_glibc, build, src_glibc)
+    decompress(tar_glibc, build, src_glibc)
     # Merge glibc 'ports' directory for glibc-2.3.5 ~ glibc-2.16.0
     mergeGlibcPorts(src_glibc, buildConfig.glibc, downloads, build)
 
     tar_linux, src_linux = getSourceTarball('linux', buildConfig.linux, downloads, build)
-    uncompress(tar_linux, build, src_linux)
+    decompress(tar_linux, build, src_linux)
 
     buildConfig.build = os.path.abspath(build)
     buildConfig.src_binutils = os.path.abspath(src_binutils)
@@ -442,13 +447,15 @@ def getSource(buildConfig):
     buildConfig.src_glibc    = os.path.abspath(src_glibc)
     buildConfig.src_linux    = os.path.abspath(src_linux)
 
-
+# Read value from configuration file, if the key does not exist, return an 
+# empty string.
 def readOptions(config, section, name):
     try:
         return config.get(section, name)
     except:
         return ''
 
+# Read configuration from a ini format file.
 def readConfigFile(buildConfig, cmdopt):
     configFilePath = cmdopt.config
     config = ConfigParser.ConfigParser()
@@ -481,11 +488,12 @@ def readConfigFile(buildConfig, cmdopt):
         buildConfig.arch     = readOptions(config, section, 'arch')
 
 
-
+# If *_INCLUDE_PATH was set, something went wrong. So unset them.
 def setEnv():
     os.unsetenv('C_INCLUDE_PATH')
     os.unsetenv('CPLUS_INCLUDE_PATH')
 
+# Prepend ${PREFIX}/bin to PATH for building glibc.
 def setEnvPath(buildConfig):
     oldPath = os.environ['PATH']
     prefix  = buildConfig.prefix 
@@ -508,6 +516,8 @@ build a cross toolchain automaticly.
     print(helpMsg)
     sys.exit(0)
 
+# Print a list of supported builtin target.
+# Not implemented yet.
 def printBuiltinList():
     sys.exit(0)
 
@@ -519,6 +529,7 @@ class CmdLineOptions:
     sysroot = ''
     jobs    = 4
 
+# Handle command line options.
 def handleOptions():
     showHelpMsg = False
     showBuiltinList = False
@@ -530,6 +541,7 @@ def handleOptions():
                                                  'config=', 'skip=', 'builtin=',
                                                  'prefix=', 'sysroot=', 'jobs='])
         except getopt.GetoptError, exc:
+            # When wrong options was gaven, report the error.
             print(exc.msg)
             sys.exit(1)
         for item in optionsList:
