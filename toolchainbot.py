@@ -12,7 +12,7 @@ class BuildOptions:
     prefix = ''
     sysroot = ''
     libpath = ''
-    libhost = '' 
+    libhost = ''
     libprefix = ''
     jobs   = ''
 
@@ -55,7 +55,7 @@ class SourceVersion:
     major = 0
     minor = 0
     extra = 0
-    
+
     def __init__(self, stringVersion):
         verList = stringVersion.split('.')
         if len(verList) < 2:
@@ -207,7 +207,6 @@ def configureTarget(buildConfig, cmdopt):
     buildConfig.prefix = os.path.abspath(buildConfig.prefix)
 
     configureBuildOptions(buildConfig, cmdopt)
-		
 
 def buildBinutils(buildConfig):
     cwd = os.getcwd()
@@ -262,7 +261,6 @@ def buildGccPass1(buildConfig):
 
     os.chdir(cwd)
 
-
 def installKernelHeader(buildConfig):
     cwd = os.getcwd()
     os.chdir(buildConfig.src_linux)
@@ -287,7 +285,7 @@ def buildGlibc(buildConfig):
         os.mkdir(build)
         os.chdir(build)
     except:
-        print('Error when building binutils.')
+        print('Error when building glibc.')
         sys.exit(1)
     configScript = buildConfig.src_glibc + '/configure'
 
@@ -390,7 +388,7 @@ def getSourceTarball(name, version, downloads, build):
     path = downloads + '/' + fullName + '.tar.bz2'
     source = build + '/' + fullName
     if os.path.exists(path):
-        return path, source 
+        return path, source
     path = downloads + '/' + fullName + '.tar.xz'
     if os.path.exists(path):
         return path, source
@@ -496,7 +494,7 @@ def setEnv():
 # Prepend ${PREFIX}/bin to PATH for building glibc.
 def setEnvPath(buildConfig):
     oldPath = os.environ['PATH']
-    prefix  = buildConfig.prefix 
+    prefix  = buildConfig.prefix
     newBin  = os.path.abspath(prefix + '/bin')
     newPath = newBin + ':' + oldPath
     os.environ['PATH'] = newPath
@@ -625,7 +623,7 @@ def main():
     # I don't known why this hack should be done.
     if cmdopt.sysroot == True:
         hackLibPath(buildConfig)
-    
+
     if not 'gcc2' in cmdopt.skipList and not 'all' in cmdopt.skipList:
         buildGccPass2(buildConfig)
 
