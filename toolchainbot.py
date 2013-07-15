@@ -12,7 +12,7 @@ class BuildOptions:
     prefix = ''
     sysroot = ''
     libpath = ''
-    libhost = '' 
+    libhost = ''
     libprefix = ''
     jobs   = ''
 
@@ -55,7 +55,7 @@ class SourceVersion:
     major = 0
     minor = 0
     extra = 0
-    
+
     def __init__(self, stringVersion):
         verList = stringVersion.split('.')
         if len(verList) < 2:
@@ -207,7 +207,6 @@ def configureTarget(buildConfig, cmdopt):
     buildConfig.prefix = os.path.abspath(buildConfig.prefix)
 
     configureBuildOptions(buildConfig, cmdopt)
-		
 
 def buildBinutils(buildConfig):
     cwd = os.getcwd()
@@ -261,7 +260,6 @@ def buildGccPass1(buildConfig):
     checkReturnCode(ret, 'install gcc pass 1')
 
     os.chdir(cwd)
-
 
 def installKernelHeader(buildConfig):
     cwd = os.getcwd()
@@ -381,13 +379,12 @@ def uncompress(tarball, build, source):
 def downloadTarball(name, version, target):
     return ''
 
-
 def getSourceTarball(name, version, downloads, build):
     fullName = name + '-' + version
     path = downloads + '/' + fullName + '.tar.bz2'
     source = build + '/' + fullName
     if os.path.exists(path):
-        return path, source 
+        return path, source
     path = downloads + '/' + fullName + '.tar.xz'
     if os.path.exists(path):
         return path, source
@@ -442,7 +439,6 @@ def getSource(buildConfig):
     buildConfig.src_glibc    = os.path.abspath(src_glibc)
     buildConfig.src_linux    = os.path.abspath(src_linux)
 
-
 def readOptions(config, section, name):
     try:
         return config.get(section, name)
@@ -480,15 +476,13 @@ def readConfigFile(buildConfig, cmdopt):
         buildConfig.cpu      = readOptions(config, section, 'cpu')
         buildConfig.arch     = readOptions(config, section, 'arch')
 
-
-
 def setEnv():
     os.unsetenv('C_INCLUDE_PATH')
     os.unsetenv('CPLUS_INCLUDE_PATH')
 
 def setEnvPath(buildConfig):
     oldPath = os.environ['PATH']
-    prefix  = buildConfig.prefix 
+    prefix  = buildConfig.prefix
     newBin  = os.path.abspath(prefix + '/bin')
     newPath = newBin + ':' + oldPath
     os.environ['PATH'] = newPath
@@ -613,7 +607,7 @@ def main():
     # I don't known why this hack should be done.
     if cmdopt.sysroot == True:
         hackLibPath(buildConfig)
-    
+
     if not 'gcc2' in cmdopt.skipList and not 'all' in cmdopt.skipList:
         buildGccPass2(buildConfig)
 
