@@ -368,7 +368,7 @@ def hackLibPath(buildConfig):
 # Decompress source files tarball. 
 def decompress(tarball, build, source):
     if os.path.exists(source):
-        print('Skip ' + tarball)
+        print('Skip ' + source)
         return
     print('Uncompress ' + os.path.basename(tarball))
     ret = subprocess.call(['tar', 'xf', tarball, '-C', build])
@@ -387,6 +387,8 @@ def getSourceTarball(name, version, downloads, build):
     fullName = name + '-' + version
     path = downloads + '/' + fullName + '.tar.bz2'
     source = build + '/' + fullName
+    if os.path.exists(source):
+        return False, source
     if os.path.exists(path):
         return path, source
     path = downloads + '/' + fullName + '.tar.xz'
